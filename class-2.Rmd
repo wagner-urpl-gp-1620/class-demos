@@ -1,0 +1,274 @@
+---
+title: "Basics of R for Data Analysis"
+description: |
+  A set of examples for simple data manipulation and analysis in R
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	rows.print=5
+)
+options(tibble.max_extra_cols = 5, tibble.print_max = 5)
+library(fs) # cross-platform file system operations
+```
+
+# Basics of R for Data Analysis
+
+This document provides an overview of popular R data analysis packages, how to load data from a CSV into a dataframe, and how to perform basic data manipulation and analysis.
+
+The content was adapted from this [Intro to R for Data Analysis workshop](https://github.com/wagner-mspp-2020/r-demos/blob/master/r-demo.Rmd) by Maxwell Austensen  
+
+## Packages in R
+
+### Installing and Loading Packages
+
+R is an open-source language so in addition to the basic functions that come standard with R (referred to as _Base R_) there are more than 10,000 user written packages that can accomplish virtually any task in R. There is an official repository for these packages called CRAN that does some vetting of the quality of packages, and packages from here can be installed directly from R using:
+
+```{r eval=FALSE}
+install.packages("PackageName")
+```
+
+These packages only need to be installed like this once, and after that initial installation we only need to load the packages that we want use for each analysis with `library()`.
+
+This project uses [`renv`](https://rstudio.github.io/renv/articles/renv.html) to handle dependency managemnt. To get this projct set up on your own system, open the project in RStudio (and open the `.Rproj` file), install `renv` (`install.packages("renv")`), and run `renv::init()`.
+
+> If you haven't installed any R packages yet, this might take a little while.
+### _Tidyverse_ Packages
+
+All of the packages we are using here are part of a collection of R packages referred to as the [`tidyverse`](https://www.tidyverse.org/).
+
+> The Tidyverse is an opinionated collection of R packages designed for data science. All packages share an underlying design philosophy, grammar, and data structures.
+All of these packages are extremely well-maintained and have helpful websites that include, examples and guides, function documentation, cheatsheets, and links to the GitHub repos where the packages are developed.
+The following are the core set of Tidyverse packages, but there are [many more](https://www.tidyverse.org/packages/).
+
+* [`dplyr`](https://dplyr.Tidyverse.org) is a grammar of data manipulation, providing a consistent set of verbs that help you solve the most common data manipulation challenges
+* [`readr`](https://readr.Tidyverse.org) provides a fast and friendly way to read rectangular data (like csv, tsv, and fwf)
+* [`tidyr`](https://tidyr.Tidyverse.org) helps you create tidy data. Tidy data is data where: Each variable is in a column, each observation is a row, and each value is a cell
+* [`stringr`](https://stringr.Tidyverse.org) provides a cohesive set of functions designed to make working with strings as easy as possible
+* [`forcats`](https://forcats.Tidyverse.org) provides a suite of useful tools that solve common problems with factors
+* [`purrr`](https://purrr.Tidyverse.org) is a complete and consistent set of tools for working with functions and vectors
+* [`ggplot2`](https://ggplot2.Tidyverse.org) is a system for declaratively creating graphics, based on The Grammar of Graphics
+
+In addition to the package websites, there is an amazing free book that covers how to use all these packages to do data analysis, called [*R for Data Science*](http://r4ds.had.co.nz/).
+
+<aside>
+There is a special `tidyverse` package that installs all the related package, and using `library(tidyverse)` loads all seven of these core packages.
+</aside>
+
+
+```{r message=FALSE}
+library(dplyr) # manipulate dataframes
+library(readr) # read/write dataframes
+library(tidyr) # reshaping dataframes
+library(stringr) # string manipulation
+library(forcats) # factor manipulation
+library(purrr) # iteration (instead of loops)
+library(ggplot2) # making plots
+```
+
+
+# Import and Preview Dataset
+
+For these examples we'll be using a dataset of buildings from the Public Advocate's [NYC Landlord Watchlist](http://landlordwatchlist.com/).
+
+<aside>
+This dataset was scraped from the Public Advocate's website in December 2018 for a [previous workshop](https://github.com/austensen/hdc-r-workshop), and the file has been copied over from there. The script used to scrape the data is also included here, but only for reference since it won't work anymore.
+</aside>
+
+Lets get started by reading in our dataset from a CSV file using `read_csv` form the `readr` package.
+
+We'll also be making use of the `fs` package, which provides cross-platform file system operations.
+
+If you need to import dataset that aren't simple rectanular flat files (like csv, tsv, and fwf) then you will need another package.   
+* [`DBI`](https://github.com/rstats-db/DBI) for relational databases (paired with database specific backends),  
+* [`haven`](https://haven.tidyverse.org/) for SPSS, Stata, and SAS data,  
+* [`httr`](https://github.com/r-lib/httr) for web APIs,  
+* [`readxl`](https://readxl.tidyverse.org/) for .xls and .xlsx sheets,  
+* [`rvest`](https://github.com/tidyverse/rvest) for web scraping,  
+* [`jsonlite`](https://github.com/jeroen/jsonlite#jsonlite) for JSON, and  
+* [`xml2`](https://github.com/r-lib/xml2) for XML.
+
+```{r}
+library(fs) # cross-platform file system operations
+watchlist_bldgs <- read_csv(path("data-raw", "landlord-watchlist-buildings_2018-12-08.csv"))
+```
+
+<aside>
+In R the (admittedly quirky) convention is to use `<-` as the assignment operator instead of `=`.
+</aside>
+
+`read_csv()` guesses about the data type of each column, and gives you the column specification is used. Often times this will be what you want, but if you want to override the guesses you can supply your own specification (see `?readr::cols` for details).
+
+```{r}
+watchlist_bldgs <- read_csv(
+  file = path("data-raw", "landlord-watchlist-buildings_2018-12-08.csv"),
+  col_types = cols(
+    .default = col_character(),
+    units = col_integer(),
+    violations = col_integer()
+  )
+)
+```
+
+Now let's take a look at this new dataframe that we've imported. You can print the dataframe to get a simple preview.
+
+<aside>
+In R when you run code with just an object it is printed to the console the same as if the `print()` function was used.
+</aside>
+
+```{r layout="l-body-outset"}
+watchlist_bldgs
+```
+
+When simply printing the dataframe you'll only see a few rows and as many columns as fit nicely on your screen. When you have many columns it's often helpful to use the function `glimpse()` to see a list of all your columns.
+
+```{r}
+glimpse(watchlist_bldgs)
+```
+
+<aside>
+In RStudio you can also use `View()` to open an window where you can interactively view your dataframe, and even sort and filter that view (without changing the dataframe).
+</aside>
+
+We can also get a very helpful overview of our dataset that includes some informative descriptive statistics using `skim()` from the package [`skimr`](https://docs.ropensci.org/skimr/)
+
+```{r}
+library(skimr)
+skim(watchlist_bldgs)
+```
+
+# Data Manipulation with `dplyr`
+
+The package `dplyr` contains functions for basic data manipulation. It is organized around 5 main functions that take a dataframe and manipulate it in some way. The functions are named as verbs which help explain what they do.
+
+* [`filter()`](https://dplyr.Tidyverse.org/reference/filter.html) - filter to the rows you want to keep based on conditions
+* [`select()`](https://dplyr.Tidyverse.org/reference/select.html) - select columns you want to keep
+* [`arrange()`](https://dplyr.Tidyverse.org/reference/arrange.html) - sort dataframe by a column
+* [`mutate()`](https://dplyr.Tidyverse.org/reference/mutate.html) - adds new columns
+* [`summarise()`](https://dplyr.Tidyverse.org/reference/summarize.html) - collapse multiple rows down to a single one
+
+Every one of these functions takes a dataframe as the first argument and returns an altered version of that dataframe.
+
+Inside of these functions columns are referred to with just their names without quotes.
+
+<aside>
+Because we are not assigning the resulting modified dataset to an object the result is simply printed without being saved anywhere
+</aside>
+
+## `filter()`
+
+Use `filter()` find rows/cases where conditions are true. Rows where the condition evaluates to `NA` are dropped.
+
+```{r layout="l-body-outset"}
+bk_bldgs <- filter(watchlist_bldgs, borough == "BROOKLYN")
+bk_bldgs
+```
+
+Multiple conditions are combined with `&`.
+
+```{r layout="l-body-outset"}
+bk_big_bldgs <- filter(watchlist_bldgs, units > 10, borough == "QUEENS")
+bk_big_bldgs
+```
+
+
+## `select()`
+
+Use `select()` to keep or drop columns. You can either specify a set of variables to keep by listing them, or specify columns to be dropped with `-`.
+
+<aside>
+If we don't assign the resulting of a function to an object the result is simply printed but not saved anywhere.
+</aside>
+
+```{r layout="l-body-outset"}
+select(watchlist_bldgs, landlord, borough, units)
+select(watchlist_bldgs, -landlord)
+```
+
+You can rename the columns that you are selecting within `select()`, or use `rename()` which keeps all columns.
+
+```{r layout="l-body-outset"}
+select(watchlist_bldgs, borough_name = borough)
+rename(watchlist_bldgs, landlord_name = landlord)
+```
+
+## `mutate()`
+
+Use `mutate()` to add new columns to a dataset. `mutate()` keeps all the existing columns and adds new one to the end of the dataset, and the variant `transmute()` creates new columns but keeps only the new ones.
+
+```{r layout="l-body-outset"}
+mutate(watchlist_bldgs, landlord_lower = str_to_lower(landlord))
+transmute(watchlist_bldgs, violations_per_unit = violations / units)
+```
+
+## `arrange()`
+
+Use `arrange()` to add order the rows in your dataset by the values of one or more columns. Be default they will be in ascending order, and you can use `desc()` for descending order.
+
+```{r layout="l-body-outset"}
+arrange(watchlist_bldgs, landlord, desc(units))
+```
+
+
+## `summarize()`
+
+You can use `summarize()` on a dataset to collapse down all the rows to a single row to calculate an aggregate statistic of one or more columns. It works in a similar way as `mutate()`, except whereas in mutate you can create new columns that are the same length as your existing dataset, with `summarise()` you will sum some sort of aggregate function (like `sum()`) that takes a column of multiple values and returns only one value.
+
+```{r layout="l-body-outset"}
+summarise(watchlist_bldgs, total_units = sum(units))
+```
+
+## `group_by()`
+
+The 6th function is `group_by()` and this doesn't change the contents of your dataframe, but instead affects how all of the above functions work if they are subsequently called on the dataframe. After a dataframe has been grouped by one or more columns, all functions apply to each group of rows in the dataset as if it was it's own dataset. `group_by()` is most commonly used with summarize. Alone `summarize()` will collapse a dataframe to a single row, but with a grouped dataframe it is collapsed down to one row _per group_. After you have finished with your grouped operations use `ungroup()` to make sure that it doesn't unintentionally alter later operations.
+
+
+```{r layout="l-body-outset"}
+boro_bldgs <- group_by(watchlist_bldgs, borough)
+boro_bldgs <- summarise(boro_bldgs, total_units = sum(units))
+boro_bldgs <- ungroup(boro_bldgs)
+boro_bldgs
+```
+
+
+## Data manipulation pipelines with `%>%` ("pipe")
+
+As you can see above when you want to make a series of changes to a dataframe you can end up repeating yourself a lot and overwriting a dataframe with each step. Thankfully there's a way to avoid this!
+
+The beauty of dplyr is that all of the functions above take a dataframe as the first argument, and return an altered version of that dataframe as the result. This allows us to start with a dataframe and link together multiple functions so that they each make a change to the dataframe then pass it along to the next function. `dplyr` includes a special operator, `%>%` (pronounced "pipe"), that allows us to chain together these function calls. When reading the code for these pipelines you can read `%>%` as "then".
+
+This `%>%` takes the object on the left and passes it to the function on the right as the first argument.
+
+For a simple example, let's look at the function `str_c()`, which concatenates strings together. Instead of passing `"a"` and `"b"` as the first and second argument, we can use the `%>%` to "pipe" the `"a"` into the function as the first argument and the `"b"` becomes the second argument.
+
+```{r}
+str_c("a", "b")
+"a" %>% str_c("b")
+```
+
+Now let's practice putting together some of these dplyr functions into a little data manipulation pipeline by getting some information about the landlords on the watchlist and the buildings they own in Brooklyn.
+
+The long pipeline of these `dplyr` functions can seem overwhelming at first, but once you get familiar with the functions you'll be able to read these code chunks like a little paragraph explaining the changes being made to a dataframe. To help illustrate this the following paragraph is a written explanation of every step of the accompanying block of code.
+
+> We'll start with the full `watchlist_bldgs` dataset, then "pipe" (`%>%`) it into the next function to `filter` the dataset to just buildings where the `borough` is `"Brooklyn"`. Then we `mutate` the dataset to add a new column called `landlord_name` that is simply a more nicely-formatted version of the existing `landlord` column. Then we `select` only the columns that we need: `landlord_name`, `units`, and HPD `violations`. Then we `group_by` the new `landlord_name` column, and then, with the dataset grouped, we'll `summarize` the data across all buildings for each landlord to get some summary information about each landlord and their buildings in Brooklyn. Specifically, we'll `summarize` to get the total number of `buildings` using the special `n()` function that counts the number of rows, we'll also get the `total_units` by `sum`ming the units across all buildings for each landlord, and we'll get the `avg_bldg_size` of each landlord's Brooklyn buildings by taking the `mean` of units across their buildings. Similarly, we get the `sum` and `mean` of HPD `violations` for each landlord. We've now gone from a dataset in which each row represents a building to one in which each row is a landlord. Since we are done with our grouped operations we can `ungroup` the data, then finally we can `arrange` the dataset in `desc`ending order of the number of `buildings` the landlord owns in Brooklyn. After all of this our final resulting dataset is assigned to a new dataframe we'll call `bk_landlords`.
+
+```{r}
+bk_landlords <- watchlist_bldgs %>%
+  filter(borough == "BROOKLYN") %>%
+  mutate(landlord_name = str_to_title(landlord)) %>%
+  select(landlord_name, units, violations) %>%
+  group_by(landlord_name) %>%
+  summarize(
+    buildings = n(),
+    total_units = sum(units),
+    avg_bldg_size = mean(units),
+    total_viol = sum(violations),
+    avg_bldg_viol = mean(violations)
+  ) %>%
+  ungroup() %>%
+  arrange(desc(buildings))
+bk_landlords
+```
