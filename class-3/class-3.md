@@ -84,37 +84,83 @@ ggplot(data = landlord_bk_10_worst) +
 
 # Cleaning data with `janitor`
 
-## clean_names() to handle column names that aren't code-friendly
 
-You can pipe your dataframe from read_csv() into clean_names() and get a dataframe with cleaner column names.
+The janitor package (https://garthtarr.github.io/meatR/janitor.html) is a great set of functions for dealing with messy data. This short demo will walk you through two functions that we find particularly helpful.
 
-```{r layout="l-body-outset"}
+## The clean_names function
+
+Often times, the raw data you're working with has columns with long names with special characters, making your data a bit harder to work with. For example, take a look at this "Energy and Water Disclosure Data" fron NYC Open Data:
+
+*Link to data: https://data.cityofnewyork.us/Environment/Energy-and-Water-Data-Disclosure-for-Local-Law-84-/vdzd-yy49*
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(tidyverse)
+
+energy_data <- read_csv("Energy_and_Water_Data_Disclosure_for_Local_Law_84_2020__Data_for_Calendar_Year_2019.csv")
+
+glimpse(energy_data)
+```
+
+
+Whoa! So many of those names have spaces and special characters, which can be a nuisance to type out, but also may lead to some problems if we don't remember to deal with them properly. For example, you may be tempted to put the names in quotes...
+
+```{r}
+
+huge_bldgs <- energy_data %>%
+  select('Property Name', 'DOF Gross Floor Area (ft²)') %>%
+  filter('DOF Gross Floor Area (ft²)' > 10000000)
+
+huge_bldgs
+
+```
+
+So, no errors showed up when we ran the code, but out filter didn't work at all. These weird issues will occur, because R interprets things in quotes as *strings of text*, not column names, which will not always be interpreted correctly when used into dplyr functions. For column names with spaces in them, you need to wrap them in backticks (``).
+
+```{r}
+
+huge_bldgs <- energy_data %>%
+  select(`Property Name`, `DOF Gross Floor Area (ft²)`) %>%
+  filter(`DOF Gross Floor Area (ft²)` > 10000000)
+
+huge_bldgs
+
+```
+
+The "clean_names" function allows you to get rid of these spaces and special characters in column names so you don't even need to worry about the above!
+
+```{r message=FALSE, warning=FALSE}
 library(janitor)
 
-your_data <- read_csv("path/to/data.csv") %>% clean_names()
+energy_data <- read_csv("Energy_and_Water_Data_Disclosure_for_Local_Law_84_2020__Data_for_Calendar_Year_2019.csv") %>% clean_names()
+
+glimpse(energy_data)
+
 ```
 
-This example is from student Renata Hegyi's work-in-progress homework assignment.
+Now, all of our column names are in "snake case" — all lower case with underscores where the spaces used to be.
 
-Here's a dataset of energy and water disclosure, `Energy_and_Water_Data_Disclosure_for_Local_Law_84_2020__Data_for_Calendar_Year_2019.csv`
+```{r}
 
-If you open the CSV you will see that the column headers are human-friendly, and contain titlecase words separated by spaces, such as "NYC Building Identification Number (BIN)".  This column name is not so friendly for computers and code, and you may have issue referring to it.
+huge_bldgs <- energy_data %>%
+  select(property_name, dof_gross_floor_area_ft) %>%
+  filter(dof_gross_floor_area_ft > 10000000)
 
-Janitor's `clean_names()` function makes your column names more computer/code-friendly.  
+huge_bldgs
 
-
-```{r layout="l-body-outset"}
-full_data <- read_csv(
-  file="Energy_and_Water_Data_Disclosure_for_Local_Law_84_2020__Data_for_Calendar_Year_2019.csv",
-  col_types = cols(
-    'Postal Code'=col_character(),
-    'Total GHG Emissions (Metric Tons CO2e)'= col_double(),
-    'Site EUI (kBtu/ft²)'= col_double()
-  )
-
-) %>% clean_names ()
 ```
 
-Piping the output of read_csv() into clean_names() turns `NYC Building Identification Number (BIN)` into `nyc_building_identificiation_number_bin`, stripping away the parentheses, spaces, and capital letters.
+## The tabyl function
 
-`janitor` has other functions too, such as `remove_empty()`, `get_dupes()`. Read more at [https://garthtarr.github.io/meatR/janitor.html](https://garthtarr.github.io/meatR/janitor.html)
+Another helpful function in the janitor package is tabyl, which shows you the frequency of values (and NA) in a given column. For example, we can see how frequently each borough shows up in our Energy and Water Disclosure Data:
+
+```{r}
+energy_data %>% tabyl(borough)
+```
+
+As you can see, roughly 30% of our data doesn't have a borough value! Good thing we checked before jumping into an borough-level analysis.
+
+You can also use tabyl to see the frequency of two variables at once:
+
+```{r}
+energy_data %>% tabyl(borough, city_building)
+```
