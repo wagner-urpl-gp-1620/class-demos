@@ -1,0 +1,143 @@
+---
+title: "Joins in R"
+author: "Sam Rabiyah"
+date: "9/25/2020"
+output: html_document
+---
+
+## Joining two tables together
+
+Joins are powerful functions that allow you to connect two datasets together through matching values. They can be useful with spatial and non-spatial data alike.
+
+As a recap of how joins work, we're going to show a simple example of two different kinds of joins: 'left' joins and 'inner' joins. For this example, we will be using the `band_members` and `band_instruments` dataframes, which are simple, 3-row datasets that comes included in the dplyr package.
+
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(tidyverse)
+```
+
+```{r}
+band_members # Example dataset of band member names and affiliations
+```
+
+```{r}
+band_instruments # Example dataset of band member names and the instruments they play
+```
+
+As you would expect, the first two arguments in a join function are the two tables you are trying to connect together. The third argument is the "join field", which is the matching column in both datasets we will use to pair up rows.
+
+### Left Joins
+
+![](https://www.garrickadenbuie.com/project/tidyexplain/images/left-join.gif)
+
+A `left_join` keeps all of the rows in the first table you specify, appending data from the second table through matching values in the specified "join field". Let's see how this kind of join looks with our example data:
+
+```{r}
+band_members_and_instruments <-
+  left_join(band_members, band_instruments, by = "name")
+
+# When the "join field" column names don't match, you can use:
+# by = c("column1" = "column2)
+
+band_members_and_instruments
+```
+
+### Inner Joins
+
+![](https://www.garrickadenbuie.com/project/tidyexplain/images/inner-join.gif)
+
+An `inner_join` keeps only the rows that have matching values between both tables in the specified "join field." Any other rows are discarded. Let's see how this kind of join looks with our example data:
+
+```{r}
+band_members_with_instruments_only <-
+  inner_join(band_members, band_instruments, by = "name")
+
+band_members_with_instruments_only
+```
+
+For more info on joins, you can visit the [dplyr website](https://dplyr.tidyverse.org/articles/two-table.html), as well as these [helpful annimations](https://www.garrickadenbuie.com/project/tidyexplain/#mutating-joins) illustrating how joins work to understand the concepts better. Also check out this [helpful guide from R4DS](https://r4ds.had.co.nz/relational-data.html#mutating-joins).
+
+## Troubleshooting joins
+
+### Joining when matching columns have different names
+
+Often times, the "join field" in your first table has a different name than that of your second table. For example, you may be trying to join two tables on a common zip code, but the first table calls the column 'Zip' and the second table calls it 'Postal Code'. There's a special syntax here to make it work:
+
+```{r}
+
+# Let's change the "name" column to be called "Artist"
+band_instruments_renamed <- band_instruments %>% rename(MusicalArtist = name)
+
+# In our join function, we need to specify that the "name" column in the first table matches up with the "MusicalArtist" column in the second table. We do that by setting our "by" parameter differently:
+band_members_and_instruments_2 <-
+  inner_join(band_members, band_instruments_renamed,
+             by = c("name" = "MusicalArtist"))
+
+band_members_and_instruments_2
+```
+
+
+### Detecting duplicate values
+
+Duplicate values in your data can cause problems with joins. For example, what if our `band_instruments` dataset listed "John" twice:
+
+```{r}
+
+# Let's add a new row to band_instruments... say "John" also plays "flute"
+band_instruments_with_dup <- band_instruments %>% add_row(name = "John", plays = "flute")
+
+band_instruments_with_dup
+```
+
+When we try and join our `band_members` table with this new table, we now get 4 rows in the resulting table, even though our first table only had 3 rows... how can that be?
+
+```{r}
+
+band_members_and_instruments_dup <-
+  left_join(band_members, band_instruments_with_dup, by = "name")
+
+band_members_and_instruments_dup
+
+```
+In R, if there are multiple matches between the two tables, all combinations of the matches are returned. This GIF actually illustrates visually how this works:
+
+![](https://www.garrickadenbuie.com/project/tidyexplain/images/left-join-extra.gif)
+
+To avoid confusing and unexpected results like this, it's important to always be checking for duplciate values in your data, _especially_ in columns that you intend to use as a join field.
+
+Luckily, the `janitor` package has a function for that called `get_dupes`.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(janitor)
+```
+
+```{r}
+band_instruments_with_dup %>% get_dupes(name)
+```
+
+Sometimes you may expect duplicate values in a column, and sometimes they may come as a surprise. General Rule: always know what each row represents in your data and what it should be unique by.
+
+
+### Anti-joins
+
+An `anti_join` returns the rows of the first table where it cannot find a match in the second table. It can be helpful to run an `anti_join` first to see which rows you may be removing before doing an `inner_join`.
+
+```{r}
+
+band_members_no_instruments <-
+  anti_join(band_members, band_instruments, by = "name")
+
+band_members_no_instruments
+```
+
+### Semi-joins
+
+A `semi_join` is the opposite— it returns the rows of the first table where it finds a match in the second table. It's almost exactly like running an `inner_join`, except it doesn't actually join on any new columns to your first table. It can be helpful to run a `semi_join` if you want to filter some table using another but don't actually want to append any new data.
+
+```{r}
+
+band_members_that_have_instruments <-
+  semi_join(band_members, band_instruments, by = "name")
+
+band_members_that_have_instruments
+```

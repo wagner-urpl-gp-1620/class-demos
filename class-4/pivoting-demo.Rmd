@@ -1,0 +1,180 @@
+---
+title: 'Demo: Pivoting Data in R'
+author: "Sam Rabiyah"
+date: "9/25/2020"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+### 1. Loading in rent stabilization data
+
+For this demo, we want to make a timeline of rent stabilized units in NYC.
+
+So, let's start by loading in some data from http://taxbills.nyc/.
+
+This project (which Chris contributed to) scraped data from PDFs of property tax documents to get estimates for rent stabilized units counts in buildings across NYC. You can find a direct link to the data we're using and read up on the various field names at the Github project page:
+https://github.com/talos/nyc-stabilization-unit-counts#user-content-data-usage.
+
+NOTE: At the time this demo was written, the taxbills.nyc site was currently down. We are getting in touch with the maintainer to see if we can get it up and working again. In the meantime, you can feel free to download the raw data from this project.
+
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+
+taxbills <- read_csv("joined.csv")
+
+```
+
+
+For this demo, we only want to look at rent stabilized unit counts, which according to the Github documentation corresponds to column names that end in "uc". Let's also grab BBL (which is a unique identifier for NYC buildings) and Borough while we're at it:
+
+
+```{r}
+rentstab <- taxbills %>% select(borough, ucbbl, ends_with("uc") )
+# starts_with(...) and ends_with(...) are neat functions to help you
+# grab names that fit a certain pattern
+
+```
+
+### 2. Pivoting data into "long" format
+
+Annoyingly, the data separates unit counts for different years into different columns... to make a timeline, we need all of the yearly data to be stored in one column.
+
+We can use the `pivot_longer` function included in tidyverse to transform our data accordingly. To get a conceptual picture of what we're about to do, see this gif:
+https://fromthebottomoftheheap.net/assets/img/posts/tidyr-longer-wider.gif
+
+![](pivot-longer.gif)
+
+
+Here is how we apply the `pivot_longer` function to our data:
+
+```{r}
+
+rs_long <- rentstab %>%
+  pivot_longer(
+    ends_with("uc"),  # The multiple column names we want to mush into one column
+    names_to = "year", # The title for the new column of names we're generating
+    values_to = "units" # The title for the new column of values we're generating
+  )
+
+```
+
+
+Now that we have our data in the proper "long" format, we can start working towards our desired plot. Let's try and make a yearly timeline of rent stab. unit counts for the boroughs of Manhattan and Brooklyn:
+
+
+```{r}
+
+rs_long_manhattan_summary <- rs_long %>%
+  filter(borough %in% c("MN","BK") # Filter only Manhattan and Brooklyn values
+          & !is.na(units)) %>% # Filter out null unit count values
+  mutate(year = as.numeric(gsub("uc","", year))) %>% # Remove "uc" from year values
+  select(year, borough, units) %>%
+  group_by(year, borough) %>%
+  summarise(total_units = sum(units) )
+
+```
+
+### 3. Building a historical bar plot
+
+Let's build our bar graph. We are going to specify a `dodge` property of the plot to show the Manhattan and Brookly bars side-by-side:
+
+
+```{r}
+
+rs_over_time_graph <- ggplot(rs_long_manhattan_summary) +
+  aes(x=year, y=total_units, fill=borough) +
+    # Note these arguments inside 'geom_bar' :
+    ### stat = "identity" allows us to have both an x and y aestethic with our bar graph
+    ### position = "dodge" puts the different colored bars side-by-side
+  geom_bar(stat = "identity", position = "dodge") +
+    # Restyle the Y-axis labels:
+  scale_y_continuous(labels = scales::unit_format(scale = 1/1000, unit="K")) +
+    # Restyle the Legend:
+  scale_fill_discrete(
+    name="Borough",
+    breaks=c("BK", "MN"),
+    labels=c("Brooklyn", "Manhattan")) +
+  labs(
+    title = "Total Rent Stabilized Units over Time",
+    subtitle = "Manhattan and Brooklyn, 2007 to 2017",
+    x = "Year",
+    y = "Total Rent Stabilized Units",
+    caption = "Source: taxbills.nyc"
+  )
+
+rs_over_time_graph
+
+```
+
+
+Hooray! There we have it!
+
+# ggplot themes
+
+As you've seen there are tons of options to change the look of figures in ggplot. It can take a lot of time to fiddle with options and get things looking perfect, but luckily ggplot makes it possible to save all these options into a "theme" that can be applied to and plot, and there are lots of packages that offer themes for every style. The [`ggthemes`](https://yutannihilation.github.io/allYourFigureAreBelongToUs/ggthemes/) packages has many options, but one that I think is worth checking out is [`hrbrthemes`](https://cinc.rud.is/web/packages/hrbrthemes/).
+
+```{r}
+library(hrbrthemes) # install.packages("hrbrthemes")
+
+rs_over_time_graph_themed <- rs_over_time_graph + theme_ipsum()
+
+rs_over_time_graph_themed
+```
+
+
+# Plotly - Interactive visualizations
+
+So far we've been using `ggplot2` to make static visualizations, but it's also possible to make graphs that are interactive - so the readr can hover over elements to get more information, select certain points, or compare values. There re a few options of packages to do this, but one of the most widely used is `plotly`.
+
+[Plotly](https://plotly.com/r/) has it's own special syntax for how to create plots of various kinds, but in addition to those it has an amazing function `ggplotly()` that automatically converts any ggplot graph into an interactive plotly version. We load the `plotly` package (after first installing it) and test out the `ggploty()` function with the graph we just created above.
+
+```{r}
+library(plotly) # install.packages("plotly")
+
+# you can hover over bars to see the values, click the button in the top right
+# to change it so that hovering over a section allows you to compare the values
+# of both bars in the section.
+ggplotly(rs_over_time_graph_themed)
+```
+
+Now lets change up the plot a bit to use a `geom_line()` instead.
+
+```{r}
+rs_over_time_graph_line <- ggplot(rs_long_manhattan_summary) +
+  aes(x = year, y = total_units, color = borough, group = borough) +
+  geom_line() +
+  scale_x_continuous(breaks = 2007:2017) +
+  scale_y_continuous(labels = scales::label_number_si()) +
+  scale_color_discrete(labels = c("BK" = "Brooklyn", "MN" = "Manhattan")) +
+  theme_ipsum() +
+  labs(
+    title = "Total Rent Stabilized Units over Time",
+    subtitle = "Manhattan and Brooklyn, 2007 to 2017",
+    color = NULL,
+    x = "Year",
+    y = "Total Rent Stabilized Units",
+    caption = "Source: taxbills.nyc"
+  )
+
+ggplotly(rs_over_time_graph_line)
+```
+
+Occasionally things won't look quite how you like, but plotly also has lots of options you can play with to overwrite things. For example, when you use facets the axis titles are overlapping. So we can just remove those from our ggplot code, and add them after with the plotly `layout()` funciton.
+
+https://github.com/hrbrmstr/hrbrthemes
+
+```{r}
+facet_lines <- rs_over_time_graph_line +
+  facet_wrap(~borough) +
+  scale_x_continuous(breaks = seq(2007, 2017, 2)) +
+  labs(x = NULL, y = NULL)
+
+ggplotly(facet_lines) %>%
+  layout(
+    yaxis = list(title = list(text="Total Rent Stabilized Units",standoff=20)),
+    xaxis = list(title = list(text="Year",standoff=20))
+  )
+```
