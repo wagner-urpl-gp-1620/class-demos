@@ -1,0 +1,188 @@
+---
+title: "Census/ACS data with tidycensus"
+author: "Maxwell Austensen"
+date: "10/5/2020"
+output: html_document
+---
+
+The content was adapted from this [Intro to R for Data Analysis workshop](https://github.com/wagner-mspp-2020/r-demos/blob/master/r-demo.Rmd) by Maxwell Austensen  
+
+# Census/ACS data with `tidycensus`
+
+The [`tidycensus`](https://walker-data.com/tidycensus/) package uses the Census Bureau's APIs to download Decennial Census and ACS summary file estaimtes. As the name implies, the package fits in with the tidyverse collection of packages.
+
+While the Census API is free to use, they require you to sign up for an API Key to get access. This is easy to do, all you need to provide is an email and there are instructions for doing this on the help package for this function: `?census_api_key`
+
+```{r}
+library(tidycensus)
+census_api_key("c32dfbf7d25fe9558fd11bf021780457970f96ff")
+```
+
+Tidycensus includes decennial census and ACS data, but today we'll stick with just ACS using `get_acs()`. There are many variables and they need to be specified using codes. We can explore these using `load_variables()`
+
+```{r}
+acs_vars <- load_variables(2017, "acs5", cache = TRUE)
+acs_vars
+```
+
+<aside>
+The list can be a bit overwhelming, so to make it easier to first find the table use RStudio's data viewer and the column filter option to filter to just the first row of each table `"_001"`
+</aside>
+
+The main function to extract the data is a bit complicated, you should pull up the help page (`?get_acs`) and walk through the arguments as you write it out.
+
+* `geography`: the level of geography we want for our data, in this case census tract. ([Full list of all available geography levels](https://walker-data.com/tidycensus/articles/basic-usage.html#geography-in-tidycensus))
+* `state`: if the requested geography nests within states, you can limit to one or more states
+* county: if the requested geography nests within counties, you can limit to one or more counties
+* `variables`: this can either be a simple vector of variable codes, or a named vector of variable codes where the names replace the codes in the column names
+* `survey`: the ACS releases 1-, 3-, and 5-year estimates. (Tracts are only available with 5-year data)
+* `year`: this is the latest year of the range. So 2018 with "acs5" means 2014-2018
+* `output`: this can either be "tidy" (default) or wide. For mapping "wide" makes since - where each variable is it's own column
+* `geometry`: whether to include geometries (shapes) with the data
+
+
+Let's start by getting some county-level data.  Median Household Income `B19013` is a commonly-used ACS metric.
+
+Here we grab the county-level data for the 5 counties (boroughs) of NYC, using their 3-digit FIPS codes to identify them.
+
+We are getting 2018 5-year ACS data (Data surveyed over 2013-2018)
+
+
+```{r}
+#install.packages('tidycensus')
+#install.packages('tidyverse')
+library(tidycensus)
+library(tidyverse)
+
+
+census_api_key("c32dfbf7d25fe9558fd11bf021780457970f96ff")
+
+acs_vars <- load_variables(2017, "acs5", cache = TRUE)
+acs_vars
+
+acs_counties_2018 <- get_acs(
+  geography = "county",
+  state = "NY",
+  county = c("005", "047", "061", "081", "085"), # NYC counties/boroughs
+  variables = c(
+    #"gross_rent_med" = "B25064_001", # median gross rent
+    "hh_inc_med" = "B19013_001" # median household income
+    #"rent_burden_med" = "B25071_001", # median rent burden
+    #"pov_pct" = "C17002_001", # poverty rate
+    #"hh_size_avg" = "B25010_001", # average hosehold size
+    #"occ_units" = "B25003_001", # total occupied units
+    #"occ_renter_units" = "B25003_003", # renter occupied units
+    #"vac_forrent_units" = "B25004_002", # vacant units for rent
+    #"vac_rented_units" = "B25004_003" # vacant units rented
+  ),
+  survey = "acs5",
+  year = 2018,
+  output = "wide",
+  geometry = FALSE
+)
+
+```
+
+We can make a simple plot with error bars to show the margin of error for each county's estimate.
+
+```{r}
+
+ggplot(acs_counties_2018) +
+  aes(x = NAME, y = hh_inc_medE) +
+  geom_bar(stat="identity", color="black", position=position_dodge()) +
+  geom_errorbar(
+    aes(
+      ymin = hh_inc_medE-hh_inc_medM,
+      ymax = hh_inc_medE+hh_inc_medM
+    ),
+    width=.2,
+    position=position_dodge(.9)
+  )
+
+```
+We can do the exact same pull of data for 2013 to compare the two 5-year periods:
+
+```{r}
+
+acs_counties_2013 <- get_acs(
+  geography = "county",
+  state = "NY",
+  county = c("005", "047", "061", "081", "085"), # NYC counties/boroughs
+  variables = c(
+    #"gross_rent_med" = "B25064_001", # median gross rent
+    "hh_inc_med" = "B19013_001" # median household income
+    #"rent_burden_med" = "B25071_001", # median rent burden
+    #"pov_pct" = "C17002_001", # poverty rate
+    #"hh_size_avg" = "B25010_001", # average hosehold size
+    #"occ_units" = "B25003_001", # total occupied units
+    #"occ_renter_units" = "B25003_003", # renter occupied units
+    #"vac_forrent_units" = "B25004_002", # vacant units for rent
+    #"vac_rented_units" = "B25004_003" # vacant units rented
+  ),
+  survey = "acs5",
+  year = 2013,
+  output = "wide",
+  geometry = FALSE
+)
+
+
+ggplot(acs_counties_2013) +
+  aes(x = NAME, y = hh_inc_medE) +
+  geom_bar(stat="identity", color="black",
+           position=position_dodge()) +
+  geom_errorbar(aes( ymin = hh_inc_medE-hh_inc_medM, ymax = hh_inc_medE+hh_inc_medM), width=.2,
+                position=position_dodge(.9))
+```
+
+Next we can combine these two dataframes together to make a combined column chart so we can visualize the change.
+
+```{r}
+
+# add a new column called `acs` to describe the timeframe
+acs_counties_2013 <- acs_counties_2013 %>% mutate(acs = '2013 5yr Estimates')
+acs_counties_2018 <- acs_counties_2018 %>% mutate(acs = '2018 5yr Estimates')
+
+# use bind_rows to combine them into one dataframe
+combined <- bind_rows(acs_counties_2013, acs_counties_2018) %>% mutate(
+  NAME = case_when(grepl("Bronx", NAME) ~ "Bronx",
+                   grepl("Kings", NAME) ~ "Brooklyn",
+                   grepl("Queens", NAME) ~ "Queens",
+                   grepl("New York County", NAME) ~ "Manhattan",
+                   grepl("Richmond", NAME) ~"Staten Island"),
+  NAME = fct_reorder(NAME, hh_inc_medE)
+)
+
+# we will need the scales library to help to format our axis labels
+library(scales)
+
+plot <- ggplot(combined) +
+  aes(x = NAME, y = hh_inc_medE, fill=acs) +
+  geom_bar(
+    stat="identity",
+    color="black",
+    position = position_dodge(),
+    size = 0
+  ) +
+  geom_errorbar(
+    aes(
+      ymin = hh_inc_medE-hh_inc_medM,
+      ymax = hh_inc_medE+hh_inc_medM
+    ),
+    width= 0.5,
+    position=position_dodge(.9), color="#003f5c"
+  )
+
+plot <- plot + labs(
+  title="NYC Boroughs Median Household Income, 2013-2018",
+  x="Borough",
+  y = "Median Household Income ($)"
+  ) +
+  theme_classic() +
+  # tilt x-axis labels
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  scale_fill_manual(values=c('#ffa600','#bc5090')) +
+  # format y-axis labels
+  scale_y_continuous(labels = unit_format(unit = "K", scale = .001))
+
+
+plot
